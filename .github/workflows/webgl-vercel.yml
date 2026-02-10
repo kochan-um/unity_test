@@ -1,0 +1,80 @@
+name: Build WebGL and Deploy to Vercel
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+      UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+      UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+      UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /usr/share/swift
+          sudo rm -rf /opt/hostedtoolcache/CodeQL /opt/hostedtoolcache/Java
+          sudo rm -rf /opt/ghc /usr/local/graalvm
+
+      - name: Validate Unity secrets
+        run: |
+          if [ -z "$UNITY_LICENSE" ] && [ -z "$UNITY_SERIAL" ]; then
+            echo "Missing UNITY_LICENSE or UNITY_SERIAL. Update GitHub Secrets." >&2
+            exit 1
+          fi
+
+      - name: Build WebGL
+        uses: game-ci/unity-builder@v4
+        with:
+          unityVersion: 6000.3.1f1
+          targetPlatform: WebGL
+          projectPath: Test
+          buildName: WebGL
+          buildsPath: Test/Build
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel
+
+      - name: Fix build permissions
+        run: sudo chown -R "$USER:$USER" Test/Build
+
+      - name: Locate WebGL output
+        id: find_output
+        run: |
+          output_dir="$(dirname "$(find Test/Build -maxdepth 5 -name index.html -print -quit)")"
+          if [ -z "$output_dir" ]; then
+            echo "WebGL output not found under Test/Build" >&2
+            exit 1
+          fi
+          echo "output_dir=$output_dir" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy to Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "Missing VERCEL_TOKEN secret."
+            exit 1
+          fi
+          SCOPE_ARGS=""
+          if [ -n "$VERCEL_ORG_ID" ]; then
+            SCOPE_ARGS="--scope $VERCEL_ORG_ID"
+          fi
+          vercel deploy "${{ steps.find_output.outputs.output_dir }}" --prod --yes --token "$VERCEL_TOKEN" $SCOPE_ARGS --name test-unity-webgl -A vercel.json

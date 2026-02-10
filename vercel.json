@@ -1,0 +1,46 @@
+{
+  "headers": [
+    {
+      "source": "/(.*)\\.wasm\\.br",
+      "headers": [
+        { "key": "Content-Encoding", "value": "br" },
+        { "key": "Content-Type", "value": "application/wasm" }
+      ]
+    },
+    {
+      "source": "/(.*)\\.js\\.br",
+      "headers": [
+        { "key": "Content-Encoding", "value": "br" },
+        { "key": "Content-Type", "value": "application/javascript" }
+      ]
+    },
+    {
+      "source": "/(.*)\\.data\\.br",
+      "headers": [
+        { "key": "Content-Encoding", "value": "br" },
+        { "key": "Content-Type", "value": "application/octet-stream" }
+      ]
+    },
+    {
+      "source": "/(.*)\\.wasm\\.gz",
+      "headers": [
+        { "key": "Content-Encoding", "value": "gzip" },
+        { "key": "Content-Type", "value": "application/wasm" }
+      ]
+    },
+    {
+      "source": "/(.*)\\.js\\.gz",
+      "headers": [
+        { "key": "Content-Encoding", "value": "gzip" },
+        { "key": "Content-Type", "value": "application/javascript" }
+      ]
+    },
+    {
+      "source": "/(.*)\\.data\\.gz",
+      "headers": [
+        { "key": "Content-Encoding", "value": "gzip" },
+        { "key": "Content-Type", "value": "application/octet-stream" }
+      ]
+    }
+  ]
+}
