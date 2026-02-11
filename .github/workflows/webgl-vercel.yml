@@ -57,11 +57,12 @@ jobs:
       - name: Locate WebGL output
         id: find_output
         run: |
-          output_dir="$(dirname "$(find Test/Build -maxdepth 5 -name index.html -print -quit)")"
-          if [ -z "$output_dir" ]; then
+          index_file="$(find Test/Build -maxdepth 5 -name index.html -print -quit)"
+          if [ -z "$index_file" ]; then
             echo "WebGL output not found under Test/Build" >&2
             exit 1
           fi
+          output_dir="$(dirname "$index_file")"
           echo "output_dir=$output_dir" >> "$GITHUB_OUTPUT"
 
       - name: Deploy to Vercel

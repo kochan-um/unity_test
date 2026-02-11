@@ -23,16 +23,21 @@ GitHub リポジトリの `Settings > Secrets and variables > Actions` で以下
 - 任意: `UNITY_EMAIL`
 - 任意: `UNITY_PASSWORD`
 - 任意（チーム運用）: `VERCEL_ORG_ID`
+- 管理API用: `SUPABASE_URL`
+- 管理API用: `SUPABASE_SERVICE_ROLE_KEY`
+- 管理API用: `SESSION_SECRET`
 
 ## 4. Vercel プロジェクト準備（手動必須）
 1. Vercel上でプロジェクトを作成する、または既存プロジェクトへの deploy 権限を確認する
 2. Organization利用時は `VERCEL_ORG_ID` を控える
+3. 管理API用に別プロジェクトを作成する場合は、Root Directory を `admin` に設定する
 
 ## 5. GitHub Actions 実行（手動実行）
 1. GitHub リポジトリの `Actions` タブを開く
 2. `Build WebGL and Deploy to Vercel` を選択
 3. `Run workflow` を実行
 4. 成功ログを確認し、Vercelの公開URLへアクセス
+5. 管理APIをデプロイする場合は `Deploy Admin API to Vercel` を選択する
 
 ## 6. 失敗時の確認ポイント（手動対応）
 - `Missing UNITY_LICENSE or UNITY_SERIAL`:
