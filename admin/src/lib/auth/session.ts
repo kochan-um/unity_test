@@ -113,7 +113,7 @@ export async function getSessionFromCookieValue(value?: string): Promise<Session
     return null;
   }
 
-  if (session.expiresAt && Date.now() > session.expiresAt * 1000) {
+  if (session.expiresAt && Math.floor(Date.now() / 1000) > session.expiresAt) {
     return null;
   }
 
@@ -123,20 +123,26 @@ export async function getSessionFromCookieValue(value?: string): Promise<Session
 export async function getSession(): Promise<SessionData | null> {
   const cookieStore = await cookies();
   const cookieValue = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-  return getSessionFromCookieValue(cookieValue);
+  console.log("DEBUG: Reading session cookie", { exists: !!cookieValue, tokenLength: cookieValue?.length });
+  const session = await getSessionFromCookieValue(cookieValue);
+  console.log("DEBUG: Session decrypted", { found: !!session, userId: session?.user.id });
+  return session;
 }
 
 export async function setSessionCookie(session: SessionData): Promise<void> {
   const value = await encryptSession(session);
 
   const cookieStore = await cookies();
+  const maxAge = Math.max(0, session.expiresAt - Math.floor(Date.now() / 1000));
+  console.log("DEBUG: Setting session cookie", { name: SESSION_COOKIE_NAME, maxAge, tokenLength: value.length });
   cookieStore.set(SESSION_COOKIE_NAME, value, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: Math.max(0, session.expiresAt - Math.floor(Date.now() / 1000)),
+    maxAge,
   });
+  console.log("DEBUG: Session cookie set complete");
 }
 
 export async function clearSessionCookie(): Promise<void> {

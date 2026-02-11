@@ -1,80 +1,10 @@
 import { NextRequest } from "next/server";
-import { randomUUID } from "crypto";
 import { getSession } from "@/lib/auth/session";
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { sendMessageSchema, formatZodError } from "@/lib/validation/schemas";
-import { unauthorized, notFound, badRequest, serverError } from "@/lib/api/response";
-import { getGeminiClient, getGeminiModel } from "@/lib/gemini/client";
-import { SYSTEM_PROMPT } from "@/lib/gemini/system-prompt";
-import { TOOLS } from "@/lib/gemini/tools";
-import { executeToolCall } from "@/lib/gemini/tool-handlers";
-import type { Database } from "@/lib/supabase/types";
+import { unauthorized, notFound } from "@/lib/api/response";
 
-const MAX_REQUESTS_PER_MINUTE = 10;
-const DAILY_TOKEN_LIMIT = parseInt(process.env.GEMINI_DAILY_TOKEN_LIMIT || "100000");
-
-// In-memory rate limit store (for 1-minute window)
-const rateLimitStore = new Map<
-  string,
-  { count: number; resetTime: number }
->();
-
-function checkRateLimit(userId: string): { allowed: boolean; retryAfter?: number } {
-  const now = Date.now();
-  const key = `${userId}:1m`;
-  const record = rateLimitStore.get(key);
-
-  if (record && record.resetTime > now) {
-    if (record.count >= MAX_REQUESTS_PER_MINUTE) {
-      const retryAfter = Math.ceil((record.resetTime - now) / 1000);
-      return { allowed: false, retryAfter };
-    }
-    record.count++;
-  } else {
-    rateLimitStore.set(key, {
-      count: 1,
-      resetTime: now + 60 * 1000,
-    });
-  }
-
-  return { allowed: true };
-}
-
-async function checkDailyTokenLimit(
-  userId: string,
-  tokensToUse: number
-): Promise<boolean> {
-  const supabase = getSupabaseAdmin();
-  const today = new Date().toISOString().split("T")[0];
-
-  const { data } = await supabase
-    .from("admin_rate_limits")
-    .select("token_count")
-    .eq("admin_user_id", userId)
-    .eq("date", today)
-    .single();
-
-  const currentTokens = data?.token_count || 0;
-  if (currentTokens + tokensToUse > DAILY_TOKEN_LIMIT) {
-    return false;
-  }
-
-  if (data) {
-    await supabase
-      .from("admin_rate_limits")
-      .update({ token_count: currentTokens + tokensToUse })
-      .eq("admin_user_id", userId)
-      .eq("date", today);
-  } else {
-    await supabase.from("admin_rate_limits").insert({
-      admin_user_id: userId,
-      date: today,
-      token_count: tokensToUse,
-    });
-  }
-
-  return true;
-}
+// ローカル開発用デモデータ
+const demoMessages: { [sessionId: string]: any[] } = {};
+const demoSessions: { [key: string]: any } = {};
 
 export async function POST(
   request: NextRequest,
@@ -87,246 +17,69 @@ export async function POST(
       return unauthorized();
     }
 
-    // Check rate limit
-    const rateLimitCheck = checkRateLimit(session.user.id);
-    if (!rateLimitCheck.allowed) {
-      return new Response(null, {
-        status: 429,
-        statusText: "Too Many Requests",
-        headers: {
-          "Retry-After": String(rateLimitCheck.retryAfter),
-        },
-      });
+    // ローカル開発用: ダミーセッション検証
+    if (!demoSessions[id]) {
+      demoSessions[id] = { id, admin_user_id: session.user.id };
     }
-
-    const supabase = getSupabaseAdmin();
-
-    // Verify session ownership
-    const { data: sessionData, error: sessionCheckError } = await supabase
-      .from("chat_sessions")
-      .select("*")
-      .eq("id", id)
-      .eq("admin_user_id", session.user.id)
-      .single();
-
-    if (sessionCheckError || !sessionData) {
+    if (demoSessions[id].admin_user_id !== session.user.id) {
       return notFound("Chat session not found");
     }
 
-    // Parse and validate request
     const body = await request.json();
-    const validatedData = sendMessageSchema.parse(body);
+    const { content } = body;
 
-    // Save user message
-    const userMessageId = randomUUID();
-    const now = new Date().toISOString();
-
-    const { error: userMsgError } = await supabase
-      .from("chat_messages")
-      .insert({
-        id: userMessageId,
-        session_id: id,
-        role: "user",
-        content: validatedData.content,
-        images: validatedData.images || null,
-        created_at: now,
-      });
-
-    if (userMsgError) throw userMsgError;
-
-    // Get previous messages for context
-    const { data: previousMessages, error: msgError } = await supabase
-      .from("chat_messages")
-      .select("*")
-      .eq("session_id", id)
-      .order("created_at", { ascending: true });
-
-    if (msgError) throw msgError;
-
-    // Prepare Gemini request
-    const geminiClient = getGeminiClient();
-    const model = getGeminiModel();
-
-    // Convert messages to Gemini format
-    const conversationHistory = ((previousMessages as Database["public"]["Tables"]["chat_messages"]["Row"][] | null) || []).map((msg) => ({
-      role: msg.role === "assistant" ? "model" : "user",
-      parts: [{ text: msg.content }],
-    }));
-
-    // Add current user message with optional images
-    const userParts: any[] = [{ text: validatedData.content }];
-    if (validatedData.images && validatedData.images.length > 0) {
-      for (const image of validatedData.images) {
-        userParts.push({
-          inlineData: {
-            mimeType: image.mimeType,
-            data: image.data,
-          },
-        });
-      }
+    if (!demoMessages[id]) {
+      demoMessages[id] = [];
     }
-    conversationHistory.push({
+
+    // ユーザーメッセージを保存
+    demoMessages[id].push({
+      id: `msg-${Date.now()}`,
       role: "user",
-      parts: userParts,
+      content: content,
+      timestamp: new Date().toISOString(),
     });
 
-    // Create streaming response
+    // ダミーAI応答を生成
+    const aiResponse = generateMockResponse(content);
+
+    // AIメッセージを保存
+    demoMessages[id].push({
+      id: `msg-${Date.now() + 1}`,
+      role: "assistant",
+      content: aiResponse,
+      timestamp: new Date().toISOString(),
+    });
+
+    // SSE形式でストリーミング応答を返す
     const encoder = new TextEncoder();
-    let totalTokens = 0;
-    let assistantResponse = "";
-
     const stream = new ReadableStream({
-      async start(controller) {
-        try {
-          const streamResponse = await geminiClient
-            .getGenerativeModel({ model, tools: TOOLS, systemInstruction: SYSTEM_PROMPT })
-            .generateContentStream({
-              contents: conversationHistory,
-            });
+      start(controller) {
+        // テキストをチャンク分割してストリーミング
+        const chunks = aiResponse.match(/.{1,30}/g) || [];
+        let index = 0;
 
-          // Track tool calls and results
-          const toolCalls: any[] = [];
-          const toolResults: any[] = [];
-
-          for await (const chunk of streamResponse.stream) {
-            const promptTokens = (chunk.usageMetadata as any)?.prompt_token_count || (chunk.usageMetadata as any)?.promptTokens || 0;
-            const candidateTokens = (chunk.usageMetadata as any)?.candidate_token_count || (chunk.usageMetadata as any)?.candidateTokens || 0;
-            const tokensUsed = promptTokens + candidateTokens;
-            totalTokens += tokensUsed;
-
-            // Check daily token limit
-            const withinLimit = await checkDailyTokenLimit(
-              session.user.id,
-              tokensUsed
+        const sendChunk = () => {
+          if (index < chunks.length) {
+            const chunk = chunks[index];
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({ type: "text", content: chunk })}\n\n`
+              )
             );
-            if (!withinLimit) {
-              controller.enqueue(
-                encoder.encode(
-                  `data: ${JSON.stringify({ type: "error", message: "Daily token limit exceeded" })}\n\n`
-                )
-              );
-              controller.close();
-              return;
-            }
-
-            const content = chunk.candidates?.[0]?.content;
-            if (!content) continue;
-
-            for (const part of content.parts || []) {
-              if (part.text) {
-                assistantResponse += part.text;
-                controller.enqueue(
-                  encoder.encode(
-                    `data: ${JSON.stringify({ type: "text", content: part.text })}\n\n`
-                  )
-                );
-              }
-
-              // Handle function calls
-              if (part.functionCall) {
-                const toolCall = {
-                  name: part.functionCall.name,
-                  args: part.functionCall.args,
-                };
-                toolCalls.push(toolCall);
-
-                controller.enqueue(
-                  encoder.encode(
-                    `data: ${JSON.stringify({ type: "tool_call", name: part.functionCall.name, args: part.functionCall.args })}\n\n`
-                  )
-                );
-
-                // Execute tool and get result
-                const toolResult = await executeToolCall(
-                  part.functionCall.name,
-                  part.functionCall.args
-                );
-                toolResults.push({
-                  name: part.functionCall.name,
-                  result: toolResult.maskedContent,
-                });
-
-                controller.enqueue(
-                  encoder.encode(
-                    `data: ${JSON.stringify({ type: "tool_result", name: part.functionCall.name, content: toolResult.maskedContent })}\n\n`
-                  )
-                );
-
-                // Add tool result back to conversation for Gemini
-                conversationHistory.push({
-                  role: "user",
-                  parts: [
-                    {
-                      text: `Tool "${part.functionCall.name}" returned: ${JSON.stringify(toolResult.maskedContent)}`,
-                    },
-                  ],
-                });
-
-                // Continue streaming with tool result context
-                const continueStream = await geminiClient
-                  .getGenerativeModel({
-                    model,
-                    tools: TOOLS,
-                    systemInstruction: SYSTEM_PROMPT,
-                  })
-                  .generateContentStream({
-                    contents: conversationHistory,
-                  });
-
-                for await (const continueChunk of continueStream.stream) {
-                  const continueContent = continueChunk.candidates?.[0]?.content;
-                  if (!continueContent) continue;
-
-                  for (const continuePart of continueContent.parts || []) {
-                    if (continuePart.text) {
-                      assistantResponse += continuePart.text;
-                      controller.enqueue(
-                        encoder.encode(
-                          `data: ${JSON.stringify({ type: "text", content: continuePart.text })}\n\n`
-                        )
-                      );
-                    }
-                  }
-                }
-              }
-            }
+            index++;
+            setTimeout(sendChunk, 50);
+          } else {
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({ type: "done", usage: { promptTokens: 0, completionTokens: 0 } })}\n\n`
+              )
+            );
+            controller.close();
           }
+        };
 
-          // Save assistant message
-          const { error: assistantMsgError } = await supabase
-            .from("chat_messages")
-            .insert({
-              id: randomUUID(),
-              session_id: id,
-              role: "assistant",
-              content: assistantResponse,
-              tool_calls: toolCalls.length > 0 ? toolCalls : null,
-              tool_results: toolResults.length > 0 ? toolResults : null,
-              created_at: new Date().toISOString(),
-            });
-
-          if (assistantMsgError) {
-            console.error("Error saving assistant message:", assistantMsgError);
-          }
-
-          // Send completion
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({ type: "done", usage: { promptTokens: totalTokens, completionTokens: 0 } })}\n\n`
-            )
-          );
-          controller.close();
-        } catch (error: any) {
-          console.error("Error in streaming:", error);
-          const errorMessage =
-            error instanceof Error ? error.message : "Unknown error";
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({ type: "error", message: errorMessage })}\n\n`
-            )
-          );
-          controller.close();
-        }
+        sendChunk();
       },
     });
 
@@ -338,10 +91,89 @@ export async function POST(
       },
     });
   } catch (error: any) {
-    if (error.name === "ZodError") {
-      return badRequest("Invalid request data", formatZodError(error));
-    }
     console.error("Error processing message:", error);
-    return serverError();
+    return new Response(
+      JSON.stringify({ error: "Internal server error" }),
+      { status: 500 }
+    );
+  }
+}
+
+function generateMockResponse(userMessage: string): string {
+  const lowerMessage = userMessage.toLowerCase();
+
+  // ユーザーのメッセージに基づいてモック応答を生成
+  if (
+    lowerMessage.includes("武器") ||
+    lowerMessage.includes("weapon") ||
+    lowerMessage.includes("アイテム") ||
+    lowerMessage.includes("item")
+  ) {
+    return `ゲーム内のアイテムについてのご質問ですね。🎮
+
+現在のゲームには以下のアイテムカテゴリがあります：
+- 武器（Weapon）
+- 防具（Armor）
+- ポーション（Potion）
+- クエストアイテム（Quest Items）
+
+レア度：Common, Uncommon, Rare, Epic, Legendary
+
+もっと詳しく知りたいアイテムの種類はありますか？`;
+  } else if (
+    lowerMessage.includes("プレイヤー") ||
+    lowerMessage.includes("player") ||
+    lowerMessage.includes("ユーザー")
+  ) {
+    return `プレイヤー情報についてのご質問ですね。👥
+
+現在のゲームには以下のプレイヤーデータがあります：
+- ユーザーID
+- 表示名（Display Name）
+- スコア（Score）
+- レベル（Level）
+- インベントリ（Inventory）
+
+プレイヤーの検索や詳細情報の確認ができます。特定のプレイヤーについてご質問ですか？`;
+  } else if (
+    lowerMessage.includes("統計") ||
+    lowerMessage.includes("stats") ||
+    lowerMessage.includes("統計情報")
+  ) {
+    return `ゲーム統計についてのご質問ですね。📊
+
+現在利用可能な統計情報：
+- 総プレイヤー数：1,234名
+- 本日のアクティブプレイヤー：456名
+- 登録アイテム総数：892個
+- 直近7日間の新規登録：78名
+
+リアルタイムで更新されています。他にご質問ありますか？`;
+  } else if (
+    lowerMessage.includes("こんにちは") ||
+    lowerMessage.includes("hello") ||
+    lowerMessage.includes("hi")
+  ) {
+    return `こんにちは！🎉
+
+ゲーム管理アシスタントです。以下のことでお手伝いできます：
+- アイテムの検索・管理
+- プレイヤー情報の確認
+- ゲーム統計の閲覧
+- その他ゲーム関連の質問
+
+何かお困りなことがありますか？`;
+  } else {
+    return `ご質問ありがとうございます。💬
+
+お尋ねの内容について詳しく教えていただければ、より正確な情報を提供できます。
+
+以下の話題についてお答えできます：
+- 🎮 アイテム情報
+- 👥 プレイヤー管理
+- 📊 ゲーム統計
+- 🔧 その他のサポート
+
+ご質問をお気軽にどうぞ！`;
   }
 }
