@@ -1,12 +1,20 @@
-import { NextRequest } from "next/server";
+﻿import { NextRequest } from "next/server";
 import { randomUUID } from "crypto";
+import { ZodError } from "zod";
 import { getSession } from "@/lib/auth/session";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { createChatSessionSchema } from "@/lib/validation/schemas";
 import { created, ok, unauthorized, serverError, badRequest } from "@/lib/api/response";
 
-// ローカル開発用ダミーデータ
-const demoSessions: { [key: string]: any } = {};
+type DemoChatSession = {
+  id: string;
+  admin_user_id: string;
+  title: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+const demoSessions: Record<string, DemoChatSession> = {};
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,7 +28,6 @@ export async function POST(request: NextRequest) {
     const sessionId = randomUUID();
     const now = new Date().toISOString();
 
-    // ローカル開発用: ダミーセッション保存
     if (process.env.NODE_ENV === "development" && session.user.role === "admin") {
       demoSessions[sessionId] = {
         id: sessionId,
@@ -39,7 +46,6 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 本番環境: 実際のSupabase操作
     const supabase = getSupabaseAdmin();
     const { error } = await supabase.from("chat_sessions").insert({
       id: sessionId,
@@ -58,31 +64,30 @@ export async function POST(request: NextRequest) {
         created_at: now,
       },
     });
-  } catch (error: any) {
-    if (error.name === "ZodError") {
+  } catch (error: unknown) {
+    if (error instanceof ZodError) {
       return badRequest("Invalid request data", error.issues);
     }
+
     console.error("Error creating chat session:", error);
     return serverError();
   }
 }
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const session = await getSession();
     if (!session) {
       return unauthorized();
     }
 
-    // ローカル開発用: ダミーセッション取得
     if (process.env.NODE_ENV === "development" && session.user.role === "admin") {
       const userSessions = Object.values(demoSessions).filter(
-        (s) => s.admin_user_id === session.user.id
+        (chatSession) => chatSession.admin_user_id === session.user.id
       );
       return ok(userSessions);
     }
 
-    // 本番環境: 実際のSupabase操作
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
       .from("chat_sessions")
@@ -93,7 +98,7 @@ export async function GET(request: NextRequest) {
     if (error) throw error;
 
     return ok(data || []);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching chat sessions:", error);
     return serverError();
   }

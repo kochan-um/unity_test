@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+﻿import { NextRequest } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { ok, unauthorized, notFound, serverError } from "@/lib/api/response";
@@ -41,7 +41,7 @@ export async function GET(
       ...sessionData,
       messages: messages || [],
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching chat session:", error);
     return serverError();
   }
@@ -89,8 +89,9 @@ export async function DELETE(
     if (sessionError) throw sessionError;
 
     return ok({ success: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error deleting chat session:", error);
     return serverError();
   }
 }
+

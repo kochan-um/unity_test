@@ -1,55 +1,68 @@
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
+﻿import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
-// Mask email addresses for privacy
 function maskEmail(email: string): string {
   const [localPart, domain] = email.split("@");
   if (!domain) return email;
+
   const masked =
     localPart.substring(0, 1) +
     "*".repeat(Math.max(1, localPart.length - 2)) +
     "@" +
     domain;
+
   return masked;
 }
 
-// Mask sensitive fields in objects recursively
-function maskSensitiveData(obj: any): any {
+function maskSensitiveData(obj: unknown): unknown {
   if (!obj || typeof obj !== "object") return obj;
 
   if (Array.isArray(obj)) {
     return obj.map((item) => maskSensitiveData(item));
   }
 
-  const masked: any = {};
-  for (const [key, value] of Object.entries(obj)) {
+  const masked: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
     if (
       key === "email" ||
       key === "user_email" ||
       (typeof value === "string" && value.includes("@"))
     ) {
-      if (typeof value === "string" && value.includes("@")) {
-        masked[key] = maskEmail(value);
-      } else {
-        masked[key] = value;
-      }
-    } else if (typeof value === "object" && value !== null) {
-      masked[key] = maskSensitiveData(value);
-    } else {
-      masked[key] = value;
+      masked[key] = typeof value === "string" && value.includes("@") ? maskEmail(value) : value;
+      continue;
     }
+
+    if (typeof value === "object" && value !== null) {
+      masked[key] = maskSensitiveData(value);
+      continue;
+    }
+
+    masked[key] = value;
   }
+
   return masked;
+}
+
+function getStringArg(args: Record<string, unknown>, key: string): string | undefined {
+  const value = args[key];
+  if (typeof value !== "string") return undefined;
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
 }
 
 export async function executeToolCall(
   toolName: string,
-  toolArgs: Record<string, any>
-): Promise<{ content: any; maskedContent: any }> {
+  toolArgs: Record<string, unknown>
+): Promise<{ content: unknown; maskedContent: unknown }> {
   const supabase = getSupabaseAdmin();
 
   switch (toolName) {
     case "search_items": {
-      const { query, category, rarity } = toolArgs;
+      const query = getStringArg(toolArgs, "query") ?? "";
+      const category = getStringArg(toolArgs, "category");
+      const rarity = getStringArg(toolArgs, "rarity");
+
       let q = supabase
         .from("items")
         .select("*")
@@ -65,18 +78,24 @@ export async function executeToolCall(
 
       const { data, error } = await q.limit(20);
       if (error) throw error;
+
+      const content = data || [];
       return {
-        content: data || [],
-        maskedContent: maskSensitiveData(data || []),
+        content,
+        maskedContent: maskSensitiveData(content),
       };
     }
 
     case "get_item_detail": {
-      const { item_id } = toolArgs;
+      const itemId = getStringArg(toolArgs, "item_id");
+      if (!itemId) {
+        throw new Error("item_id is required");
+      }
+
       const { data, error } = await supabase
         .from("items")
         .select("*")
-        .eq("id", item_id)
+        .eq("id", itemId)
         .eq("is_deleted", false)
         .single();
 
@@ -88,7 +107,8 @@ export async function executeToolCall(
     }
 
     case "search_players": {
-      const { query } = toolArgs;
+      const query = getStringArg(toolArgs, "query") ?? "";
+
       const { data, error } = await supabase
         .from("player_profiles")
         .select("*")
@@ -96,18 +116,24 @@ export async function executeToolCall(
         .limit(20);
 
       if (error) throw error;
+
+      const content = data || [];
       return {
-        content: data || [],
-        maskedContent: maskSensitiveData(data || []),
+        content,
+        maskedContent: maskSensitiveData(content),
       };
     }
 
     case "get_player_detail": {
-      const { player_id } = toolArgs;
+      const playerId = getStringArg(toolArgs, "player_id");
+      if (!playerId) {
+        throw new Error("player_id is required");
+      }
+
       const { data, error } = await supabase
         .from("player_profiles")
         .select("*")
-        .or(`id.eq.${player_id},user_id.eq.${player_id}`)
+        .or(`id.eq.${playerId},user_id.eq.${playerId}`)
         .single();
 
       if (error) throw error;
@@ -118,17 +144,22 @@ export async function executeToolCall(
     }
 
     case "get_player_inventory": {
-      const { player_id } = toolArgs;
+      const playerId = getStringArg(toolArgs, "player_id");
+      if (!playerId) {
+        throw new Error("player_id is required");
+      }
+
       const { data: inventoryData, error: invError } = await supabase
         .from("inventory_items")
         .select("*, items(name, category, rarity, icon_url)")
-        .eq("user_id", player_id);
+        .eq("user_id", playerId);
 
       if (invError) throw invError;
 
+      const content = inventoryData || [];
       return {
-        content: inventoryData || [],
-        maskedContent: maskSensitiveData(inventoryData || []),
+        content,
+        maskedContent: maskSensitiveData(content),
       };
     }
 
