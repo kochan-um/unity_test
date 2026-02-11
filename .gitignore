@@ -48,3 +48,7 @@ crashlytics-build.properties
 # Temporary auto-generated Android Assets
 [Aa]ssets/[Ss]treamingAssets/aa.meta
 [Aa]ssets/[Ss]treamingAssets/aa/*
+
+# Supabase Settings (contains sensitive API keys)
+[Aa]ssets/[Rr]esources/SupabaseSettings.asset
+[Aa]ssets/[Rr]esources/SupabaseSettings.asset.meta
