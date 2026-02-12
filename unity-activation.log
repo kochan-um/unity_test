@@ -1,0 +1,22 @@
+[Licensing::Module] Trying to connect to existing licensing client channel...
+[Licensing::IpcConnector] Successfully connected to: "LicenseClient-kmei2" at "2026-02-11T17:28:10.7090805Z"
+[Licensing::Client] Code 10 while verifying Licensing Client signature (process Id: 8972, path: "C:/Program Files/Unity Hub/UnityLicensingClient_V1/Unity.Licensing.Client.exe")
+[Licensing::Module] LicensingClient has failed validation; ignoring
+[Licensing::Client] Error: HandshakeResponse reported an error:
+	ResponseCode: 505
+	ResponseStatus: Unsupported protocol version '1.17.4'.
+[Licensing::Module] Error: Failed to handshake to channel: "LicenseClient-kmei2"
+[Licensing::IpcConnector] LicenseClient-kmei2 channel disconnected successfully.
+[Licensing::IpcConnector] Successfully connected to: "LicenseClient-kmei2-6000.3.1" at "2026-02-11T17:28:10.757312Z"
+[Licensing::Client] Handshaking with LicensingClient:
+  Version:                 1.17.4+4293ba1
+  Session Id:              75e3599b754e41349295147458fe130b
+  Correlation Id:          4715a604d5c165729bdf98793c86c1ac
+  External correlation Id: 2052026522566318424
+  Machine Id:              JzVB2sMSO6BjrsIlUKHj9uEIFQA=
+[Licensing::Module] Successfully connected to LicensingClient on channel: "LicenseClient-kmei2-6000.3.1" (connect: 0.00s, validation: 0.01s, handshake: 2.85s)
+[Licensing::IpcConnector] Successfully connected to: "LicenseClient-kmei2-6000.3.1-notifications" at "2026-02-11T17:28:13.6194442Z"
+[Licensing::Module] Generating manual activation license file: C:\Users\kmei2\OneDrive\Desktop\Test/Unity_v6000.3.1f1.alf
+[Licensing::Client] Successfully processed ALF generation request: C:\Users\kmei2\OneDrive\Desktop\Test\Unity_v6000.3.1f1.alf
+[Licensing::Module] Manual activation license file successfully saved.
+Exiting without the bug reporter. Application will terminate with return code 0

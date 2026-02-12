@@ -9,6 +9,7 @@
 ## 事前準備
 1. GitHub リポジトリの `Settings > Secrets and variables > Actions` に以下を登録する
 - `UNITY_LICENSE` または `UNITY_SERIAL`（いずれか必須）
+  - 互換: `UNITY_LISENCE` / `UNITY_LICENCE` でも受け付けます
 - `UNITY_EMAIL`（必要に応じて）
 - `UNITY_PASSWORD`（必要に応じて）
 - `VERCEL_TOKEN`（必須）

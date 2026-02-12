@@ -20,6 +20,7 @@ GitHub リポジトリの `Settings > Secrets and variables > Actions` で以下
 
 - 必須: `VERCEL_TOKEN`
 - 必須（どちらか）: `UNITY_LICENSE` または `UNITY_SERIAL`
+  - 互換: `UNITY_LISENCE` / `UNITY_LICENCE` でも可
 - 任意: `UNITY_EMAIL`
 - 任意: `UNITY_PASSWORD`
 - 任意（チーム運用）: `VERCEL_ORG_ID`
